@@ -6,7 +6,7 @@ import time
 import json
 import os
 
-TAM_MAX = 39+ (2**14)
+TAM_MAX_PACOTE = 39+ (2**14)
 
 class Rota():
 	def __init__(self, destino, caminho, peso):
@@ -18,15 +18,15 @@ class Rota():
 class Router:
 	def __init__(self):
 		self.PORT = 55151
-		self.mapa = {} #um dicionário que contém lista de listas 
-		self.ligado = True
+		self.mapa = {} #um dicionário que contém uma lista de rotas
 		self.permissaoMapa = threading.Lock()
+		self.ligado = True
 
 	def setIp(self, host):
 		self.HOST = host
 
 	def setPeriod(self, period):
-		self.period = period
+		self.period = int(period)
 
 	def desligar(self):
 		self.ligado = False
@@ -129,13 +129,36 @@ class Router:
 			entrada, saida, excecao = select.select([self.sock], [], [], 10)
 			
 			if entrada:
-				dados, endereco = self.sock.recvfrom(TAM_MAX)
+				dados, endereco = self.sock.recvfrom(TAM_MAX_PACOTE)
 				pacote = json.loads(dados)
 				
 				if pacote["destination"] == self.HOST:
 					self.tratarPacote(pacote)
 				else:
 					self.encaminharPacote(pacote)
+
+	def rotearVetor(self):
+		while self.ligado:
+			time.sleep(self.period)
+			dados = None
+
+			with self.permissaoMapa:
+				dados = self.mapa.copy()
+			
+			for endereco in dados:
+				if dados[endereco][0].destino == dados[endereco][0].caminho:
+					pacote = {"type": "update"}
+					pacote["source"] = f'"{self.HOST}"'
+					destination = {}
+					
+					for auxEndereco in dados:
+						#split horizon
+						if not (dados[auxEndereco][0].caminho == endereco):
+							destination[f'"{dados[auxEndereco][0].endereco}"'] = dados[auxEndereco][0].peso
+
+					destination[f'"{self.HOST}"'] = 0
+					pacote["destination"] = distances
+					self.sock.sendto(json.dumps(pacote), (self.host, self.port))
 
 	def __str__(self):
 		return f'''PORT: {self.PORT}
@@ -168,8 +191,11 @@ if __name__ == '__main__':
 
 		roteador.bind()
 
-		threadRoteando = threading.Thread(target = roteador.rotearPacotes)
-		threadRoteando.start()
+		threadRoteandoPacotes = threading.Thread(target = roteador.rotearPacotes)
+		threadRoteandoPacotes.start()
+
+		threadRoteandoVetor = threading.Thread(target = roteador.rotearVetor)
+		threadRoteandoVetor.start()
 
 		while True:
 			entrada = input().split(' ')
