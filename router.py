@@ -100,7 +100,7 @@ class Router:
 			elif (len(lista) == 1 and 
 				lista[0].peso < rota.peso and 
 				lista[0].caminho == rota.caminho):
-				#print('rota pior')
+				#print('rota piorou')
 				lista[0] = rota
 
 			#testa se a rota piorou
@@ -119,7 +119,7 @@ class Router:
 	def supervisionarTempo(self, destino, caminho):
 		existeRota = True
 
-		while existeRota:
+		while existeRota and self.ligado:
 			existeRota = False
 			rotas = None
 
@@ -177,14 +177,15 @@ class Router:
 		#envia o pacote se o caminho existe no mapa
 		if (pacote["destination"] in self.mapa 
 			and self.mapa[pacote["destination"]][0].caminho in self.mapa):
-			endereco = self.mapa[pacote["destination"]][0].caminho
-			self.sock.sendto(pack('!{}s'.format(len(pacoteEnviado)),pacoteEnviado.encode())
-				, (endereco, self.PORT))
 
-			#altera a ordem da lista para fazer o balanceamento de carga
 			with self.permissaoMapa:
-				if len(self.mapa[endereco]) > 1:
-					self.mapa[endereco] = self.mapa[endereco][1:].append(self.mapa[endereco][0])
+				endereco = self.mapa[pacote["destination"]][0].caminho
+				self.sock.sendto(pack('!{}s'.format(len(pacoteEnviado)),pacoteEnviado.encode())
+					, (endereco, self.PORT))
+
+				#altera a ordem da lista para fazer o balanceamento de carga
+				if len(self.mapa[pacote["destination"]]) > 1:
+					self.mapa[pacote["destination"]] = self.mapa[pacote["destination"]][1:] + [self.mapa[pacote["destination"]][0]]
 
 	def tratarPacote(self, pacote):
 		#print(f'Tratar pacote -> {pacote}')
@@ -244,8 +245,9 @@ class Router:
 					distances = {}
 					
 					for auxEndereco in dados:
-						#split horizon
-						if not (dados[auxEndereco][0].caminho == endereco):
+						#verifica se o caminho ainda existe e realiza o split horizon
+						if (not (dados[auxEndereco][0].caminho == endereco) and
+							dados[auxEndereco][0].caminho in dados):
 							distances[auxEndereco] = dados[auxEndereco][0].peso
 
 					distances[self.HOST] = 0
@@ -303,3 +305,7 @@ if __name__ == '__main__':
 
 	except KeyboardInterrupt:
 		roteador.desligar()
+		roteador.linkFixo = {}
+		roteador.mapa = {}
+	
+	sys.exit()
