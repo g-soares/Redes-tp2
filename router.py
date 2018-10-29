@@ -27,6 +27,7 @@ class Router:
 	def __init__(self):
 		self.PORT = 55151
 		self.mapa = {} #um dicionário que contém uma lista de rotas
+		self.linkFixo = {}
 		self.permissaoMapa = threading.Lock()
 		self.ligado = True
 
@@ -51,9 +52,13 @@ class Router:
 		try:
 			for linha in open(nomeArquivo,'r'):
 				comando, ip, peso = linha.split(' ')
-				self.adicionarDados(Rota(ip, ip, peso))
+				self.adicionarLinkFixo(Rota(ip, ip, peso))
 		except :
 			print(f'Falha ao abrir o arquivo de startup-commands {nomeArquivo}')
+
+	def adicionarLinkFixo(self, rota):
+		self.linkFixo[rota.destino] = rota
+		self.adicionarDados( rota)
 
 	#adiciona dados ao vetor de distâncias
 	def adicionarDados(self, rota):
@@ -148,6 +153,12 @@ class Router:
 		with self.permissaoMapa:
 			self.mapa.pop(ip)
 
+		if ip in self.linkFixo:
+			self.adicionarDados(self.linkFixo[ip])
+
+	def removerLinkFixo(self, ip):
+		self.linkFixo.pop(ip)
+
 	def enviarTrace(self, destino):
 		pacote = {"type": "trace"}
 		pacote["source"] = self.HOST
@@ -163,7 +174,9 @@ class Router:
 
 		pacoteEnviado = json.dumps(pacote)
 
-		if pacote["destination"] in self.mapa:
+		#envia o pacote se o caminho existe no mapa
+		if (pacote["destination"] in self.mapa 
+			and self.mapa[pacote["destination"]][0].caminho in self.mapa):
 			endereco = self.mapa[pacote["destination"]][0].caminho
 			self.sock.sendto(pack('!{}s'.format(len(pacoteEnviado)),pacoteEnviado.encode())
 				, (endereco, self.PORT))
@@ -179,10 +192,13 @@ class Router:
 			print(pacote["payload"])
 
 		elif pacote["type"] == "update":
-			pesoAteVizinho = self.mapa[pacote["source"]][0].peso
-
-			for dado in pacote["distances"]:
-				self.adicionarDados(Rota(dado, pacote["source"], pacote["distances"][dado]+ pesoAteVizinho))
+			
+			'''evita que um pacote de atualização seja processado antes 
+			do link fixo ser adicionado e gere uma exceção'''
+			if pacote["source"] in self.mapa:
+				pesoAteVizinho = self.mapa[pacote["source"]][0].peso
+				for dado in pacote["distances"]:
+					self.adicionarDados(Rota(dado, pacote["source"], pacote["distances"][dado]+ pesoAteVizinho))
 		
 		elif pacote["type"] == "trace":
 			pacote["hops"].append(self.HOST)
@@ -276,8 +292,9 @@ if __name__ == '__main__':
 		while True:
 			entrada = input().split(' ')
 			if entrada[0] == 'add':
-				roteador.adicionarDados(Rota(entrada[1],entrada[1],entrada[2]))
+				roteador.adicionarLinkFixo(Rota(entrada[1],entrada[1],entrada[2]))
 			elif entrada[0] == 'del':
+				roteador.removerLinkFixo(entrada[1])
 				roteador.removerLink(entrada[1])
 			elif entrada[0] == 'trace':
 				roteador.enviarTrace(entrada[1])
