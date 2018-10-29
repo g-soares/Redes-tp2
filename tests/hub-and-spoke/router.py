@@ -164,7 +164,7 @@ class Router:
 		pacoteEnviado = json.dumps(pacote)
 
 		if pacote["destination"] in self.mapa:
-			endereco = self.mapa[pacote["destination"]][0].caminho
+			endereco = pacote["destination"]
 			self.sock.sendto(pack('!{}s'.format(len(pacoteEnviado)),pacoteEnviado.encode())
 				, (endereco, self.PORT))
 
@@ -174,7 +174,7 @@ class Router:
 					self.mapa[endereco] = self.mapa[endereco][1:].append(self.mapa[endereco][0])
 
 	def tratarPacote(self, pacote):
-		#print(f'Tratar pacote -> {pacote}')
+		print(f'Tratar pacote -> {pacote}')
 		if pacote["type"] == "data":
 			print(pacote["payload"])
 
@@ -213,9 +213,9 @@ class Router:
 			time.sleep(self.period)
 			dados = None
 
-			#print('---------------')
-			#print(self.mapa)
-			#print('---------------')
+			print('---------------')
+			print(self.mapa)
+			print('---------------')
 
 			with self.permissaoMapa:
 				dados = self.mapa.copy()
@@ -230,7 +230,7 @@ class Router:
 					for auxEndereco in dados:
 						#split horizon
 						if not (dados[auxEndereco][0].caminho == endereco):
-							distances[auxEndereco] = dados[auxEndereco][0].peso
+							distances[dados[auxEndereco][0].endereco] = dados[auxEndereco][0].peso
 
 					distances[self.HOST] = 0
 					pacote["distances"] = distances
